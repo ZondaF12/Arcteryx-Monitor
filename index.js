@@ -2,7 +2,9 @@ require("dotenv").config();
 const got = require("got");
 const { Client, Intents, MessageEmbed } = require("discord.js");
 
-let previouslyInStock = [];
+let sku = "X000004787006";
+
+let previouslyInStock = false;
 
 const client = new Client({
   intents: [
@@ -26,48 +28,65 @@ function delay(delayInms) {
 
 async function main() {
   while (true) {
-    await checkAvaliable(6623562334340, 39600579018884);
-    await delay(8000);
-    await checkAvaliable(6623562334340, 39600579051652);
-    await delay(8000);
-    await checkAvaliable(5141773779076, 34519185686660);
-    await delay(8000);
-    await checkAvaliable(5141773779076, 34519185719428);
-    await delay(300000);
+    await checkAvaliable();
+    await delay(10000);
   }
 }
 
-async function checkAvaliable(productID, sizeID) {
+async function checkAvaliable() {
   let res;
 
-  let randomNumber = Math.floor(Math.random() * 100000);
+  let headers = {
+    accept: "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    "cache-control": "no-cache",
+    "content-type": "application/json",
+    pragma: "no-cache",
+    "sec-ch-ua":
+      '"Google Chrome";v="105", "Not)A;Brand";v="8", "Chromium";v="105"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site",
+    store: "arcteryx_en",
+    "x-country-code": "gb",
+    "x-is-checkout": "false",
+    "x-jwt": "",
+    Referer: "https://arcteryx.com/",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+  };
 
+  let payload = {
+    query:
+      "query gqlGetProductInventoryBySkus($productSkus: [String!]) {\n  products(filter: { sku: { in: $productSkus } }, pageSize: 500) {\n    items {\n      name\n      sku\n      ...on ConfigurableProduct {\n        variants {\n          product {\n            sku\n            quantity_available\n          }\n        }\n      }\n    }\n  }\n}",
+    variables: { productSkus: ["X000004787"] },
+  };
+
+  console.log(payload);
   try {
-    res = await got.get(
-      `https://threadbare.com/collections/mens-trousers/products.json?limit=${randomNumber}`
-    );
+    res = await got.post(`https://mcprod.arcteryx.com/graphql`, {
+      headers,
+      json: payload,
+    });
 
-    const obj = JSON.parse(res.body);
+    let obj = JSON.parse(res.body).data.products.items[0].variants;
 
-    let product = await obj.products.find((el) => el.id === productID);
-    let size = await product.variants.find((el) => el.id === sizeID);
+    console.log(obj);
 
-    // console.log(size);
-    let index = previouslyInStock.findIndex((e) => e.id === sizeID);
+    let product = await obj.find((el) => el.product.sku === sku);
 
-    if (previouslyInStock.find((el) => el.id === sizeID)) {
-      if (previouslyInStock[index].available != size.available) {
-        previouslyInStock[index].available = size.available;
+    let found = product.product;
+
+    if (found.quantity_available != 0) {
+      if (!previouslyInStock) {
+        console.log("Instock");
+        await discordMessage();
+        previouslyInStock = true;
       }
     } else {
-      previouslyInStock.push({ id: sizeID, available: size.available });
-      index = previouslyInStock.findIndex((e) => e.id === sizeID);
-    }
-
-    console.log(index);
-
-    if (size.available && !previouslyInStock[index].available) {
-      await discordMessage();
+      console.log("OOS");
+      previouslyInStock = false;
     }
   } catch (err) {
     console.log(err);
@@ -75,14 +94,12 @@ async function checkAvaliable(productID, sizeID) {
 }
 
 async function discordMessage() {
-  const channel = client.channels.cache.get("891751964545781810");
+  const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL);
 
   const embed = new MessageEmbed()
     .setColor("#fd2973")
-    .setTitle("Product In Stock")
-    .setURL(
-      `https://threadbare.com/products/mens-bloomfield-black-plain-cargo-trousers`
-    )
+    .setTitle("THE FUCKING ARCTERYX IS IN STOCK")
+    .setURL(`https://arcteryx.com/gb/en/shop/mens/beta-lt-jacket`)
     .setTimestamp()
     .setFooter({
       text: "Made by Roo#7777",
